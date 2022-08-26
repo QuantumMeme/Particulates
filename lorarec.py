@@ -17,6 +17,8 @@ bucket = "asbestos"
 #bucket = "data"
 
 SLEEPTIME = 0.7
+MAX_SIZE= 184
+
 CONN_ERR  = 0 # for diagnostics
 PARSE_ERR = 0
 CLEAN_ERR = 0
@@ -56,7 +58,7 @@ def clean_message(message):
         return clean_msg.decode("utf-8")
 
     except UnicodeError:
-        print ("despite our best efforts something messed up")
+        print ("UnicodeError in func clean_message")
         CLEAN_ERR += 1
 
 
@@ -65,10 +67,9 @@ def extractInflux(datalist):
 
     extracted = []
     cap = len(datalist)
-    sensorID = datalist[cap-1]
-    sensorID = sensorID[:len(sensorID)-4]
+    sensorID = "0x" + datalist[0]
 
-    cnt = 0
+    cnt = 1
     while cnt < cap:
 
         if datalist[cnt].find("PC0.1") > -1:
@@ -129,14 +130,14 @@ def main():
         final_msg = {}
 
         while True:
-            if ser.in_waiting > 184:
+            if ser.in_waiting > MAX_SIZE:
                 raw_msg = ser.readline()
                 break
             else:
                 SMALL_ERR += 1
         print("\nraw message\n{}\n".format(raw_msg))
         
-        if len (raw_msg) < 184:
+        if len (raw_msg) < MAX_SIZE:
             msgavailable = -1
         else:
             try:
