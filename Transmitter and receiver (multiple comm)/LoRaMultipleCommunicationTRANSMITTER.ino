@@ -1,52 +1,30 @@
-
 #include "heltec.h"
-#include "Arduino.h"
+#define BAND    915E6  //you can set band here directly,e.g. 868E6,915E6
+int counter = 0;
+String packet;
 
-#define BAND    433E6  //you can set band here directly,e.g. 868E6,915E6
+int SENSOR_ID = 5;
 
+const int intake = 0;
+const int sensor_exhaust = 2;
+const int filter_exhaust = 22;
+const int plate = 21;
 
-String outgoing;              // outgoing message
-String serial2Out;
-String serialIn;
-byte localAddress = 0xFD;     // address of this device
-byte destination = 0xBB;      // destination to send to
-/*
- * receiver address: 0xBB
- * transmitter 1 address: 0xFD
- * transmitter 2 address: 0xC5
- */
-
-byte msgCount = 0;            // count of outgoing messages
-long lastSendTime = 0;        // last send time
-int interval = 200;          // interval between sends
-
-void displayMessage(String message)
-{
-  Heltec.display->clear();
-  Heltec.display->display();
-  Heltec.display->drawString(0, 0, message);
-  Heltec.display->display();
-}
-
-void oledSetup()
-{
-  Heltec.display->clear();
-  Heltec.display->display();
-  Heltec.display->setContrast(255);
-  Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-  Heltec.display->setFont(ArialMT_Plain_10);
-}
-
-void setup()
-{
-   //WIFI Kit series V1 not support Vext 
+void setup() {
+  pinMode(intake, OUTPUT);
+  pinMode(sensor_exhaust, OUTPUT);
+  pinMode(filter_exhaust, OUTPUT);
+  pinMode(plate, OUTPUT);
+  //local serial
   Serial.begin(115200);
-
   //setting up Piera serial
   Serial2.begin(115200, SERIAL_8N1, 17, 23);
-  Serial.println("Heltec.LoRa Duplex");
+  Serial.print("Serial open!");
+  
+  // setting up routines on the ESP32
+  Heltec.begin(true /*DisplayEnable Enable*/, true /*Heltec.LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
 
-  Heltec.begin(true /*DisplayEnable Enable*/, true /*Heltec.LoRa Enable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
+
   Heltec.display->clear();
   Heltec.display->drawString(0, 0, "Warming up 7100...");
   Heltec.display->display();
@@ -60,66 +38,95 @@ void setup()
   delay(3000);
   Serial2.write("Wcln=0\r\n");
   delay(100);
+
+  //setting up the timing for the sensor
   //Serial2.write("$Wfactory=\r\n");
   //delay(100);
-  Serial2.write("$Winterval=30\r\n");
+  Serial2.write("$Winterval=15\r\n");
+  Serial2.write("$Wfan=1\r\n");
   //Serial2.write("$Won=200\r\n");
-  delay(500);
+  delay(3000);
 
+  //LoRa specific settings
+
+  /*
+* LoRa.setTxPower(txPower,RFOUT_pin);
+* txPower -- 0 ~ 20
+* RFOUT_pin could be RF_PACONFIG_PASELECT_PABOOST or RF_PACONFIG_PASELECT_RFO
+*   - RF_PACONFIG_PASELECT_PABOOST -- LoRa single output via PABOOST, maximum output 20dBm
+*   - RF_PACONFIG_PASELECT_RFO     -- LoRa single output via RFO_HF / RFO_LF, maximum output 14dBm
+ */
+  LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+  LoRa.setSpreadingFactor(7);
+  LoRa.setCodingRate4(8);
+  LoRa.setSignalBandwidth(250E3);
 
   Heltec.display->clear();
   Heltec.display->display();
   Heltec.display->drawString(0, 0, "Starting measurements...");
   Heltec.display->display();
-}
-
-void loop()
-{ 
-  if (Serial2.available())
-  {
-    //digitalWrite(25, HIGH);
-    
-    serial2Out = Serial2.readStringUntil('\n');
-    String serialString = serial2Out; //create string object
-    //LoRa.setSignalBandwidth(250E3);
-    
-    oledSetup();
-    String amt = (String) serial2Out.length();
-    Heltec.display->drawString(0,0,amt);
-    Heltec.display->drawStringMaxWidth(0, 15, 128, serial2Out );
-    Heltec.display->display();
-    
-    sendMessage(serial2Out);
-
-
-    String fullOutput = serial2Out + "\r\n";
-    if (serial2Out)
-    {
-      // Write sensor data to USB serial output'
-      Serial.write(fullOutput.c_str());
-    }
-    digitalWrite(25, LOW);
-    //delay(100);
-  // parse for a packet, and call onReceive with the result:
-  //onReceive(LoRa.parsePacket());
-  }
-}
-
-void sendMessage(String outgoing)
-{
-  LoRa.beginPacket();                   // start packet
-  LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-  LoRa.setSpreadingFactor(10);
-  LoRa.setCodingRate4(8);
   
-  LoRa.write(destination);              // add destination address
-  LoRa.write(localAddress);             // add sender address
-  LoRa.write(msgCount);                 // add message ID
-  LoRa.write(outgoing.length());        // add payload length
-  LoRa.print(outgoing);                 // add payload
-  LoRa.endPacket();                     // finish packet and send it
-  msgCount++;                           // increment message ID
 }
 
+void loop() {
+
+  Serial.print("GETTING SAMPLE\n");
+  digitalWrite(filter_exhaust, LOW);
+  digitalWrite(intake,HIGH);
+  digitalWrite(plate, HIGH);
+  delay(5000);
+
+  Serial.print("CLEARING SMALLER PARTICULATE\n");
+  digitalWrite(intake, LOW);
+  digitalWrite(filter_exhaust, HIGH);
+  delay(5000);
+
+  Serial.print("TAKING MEASUREMENTS\n");
+  digitalWrite(filter_exhaust, LOW);
+  Serial2.write("$Wfan=1\r\n");
+  delay(1000);
+  digitalWrite(sensor_exhaust, HIGH);
+  digitalWrite(plate, LOW);
+  delay(1000);
+
+  
+  //Declaring empty string to store packet
+  int flag = 0;
+  while(flag == 0)
+  {
+      if (Serial2.available())
+      {
+      packet = (String) SENSOR_ID + ",";
+      // clear display
+      Heltec.display->clear();
+      Heltec.display->display();
+      
+      packet = packet + Serial2.readStringUntil('\n');
+      
+      int amt = packet.length();
+      Serial.print(packet + "\n");
+  
+      Heltec.display->drawString(0,0,(String) amt);
+      Heltec.display->drawStringMaxWidth(0, 15, 128, packet );
+      Heltec.display->display();
+      if (amt > 185)
+      {
+        LoRa.beginPacket();
+        LoRa.print(packet.c_str());
+        LoRa.endPacket();
+        flag = 1;
+      }
+      else
+      {
+        Serial.print("Packet too small, not sending.\n");
+      }
+    }
+  }
+
+  Serial.print("CLEARING CHAMBER\n");  
+  digitalWrite(sensor_exhaust, LOW);
+  Serial2.write("$Wfan=0\r\n");
+  digitalWrite(filter_exhaust, HIGH);
+  delay(3000);
 
 }
