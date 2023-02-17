@@ -5,6 +5,7 @@ String packet;
 
 int SENSOR_ID = 3;
 
+// Defining which pins on the ESP32 control which components
 const int intake = 0;
 const int sensor_exhaust = 2;
 const int filter_exhaust = 22;
@@ -14,7 +15,7 @@ const int red = 33;
 const int blue = 12;
 const int green = 13;
 
-
+// Setting up the indicator LED
 void ledFlash3(int color1, int color2, int color3) {
   digitalWrite(color1, HIGH);
   delay(100);
@@ -57,16 +58,16 @@ void setup() {
   pinMode(blue, OUTPUT);
   pinMode(green, OUTPUT);
 
-  //local serial
+  //Opening a local serial connection
   Serial.begin(115200);
-  //setting up Piera serial
+  //Opening a serial connection with the IPS-7100
   Serial2.begin(115200, SERIAL_8N1, 17, 23);
   Serial.print("Serial open!");
 
   // setting up routines on the ESP32
   Heltec.begin(true /*DisplayEnable Enable*/, true /*Heltec.LoRa Disable*/, true /*Serial Enable*/, true /*PABOOST Enable*/, BAND /*long BAND*/);
 
-
+  // Setting up the Piera IPS-7100 Particulate Sensor.
   Heltec.display->clear();
   Heltec.display->drawString(0, 0, "Warming up 7100...");
   Heltec.display->display();
@@ -86,9 +87,7 @@ void setup() {
   Serial2.write("Wcln=0\r\n");
   delay(100);
 
-  //setting up the timing for the sensor
-  //Serial2.write("$Wfactory=\r\n");
-  //delay(100);
+  //setting up the timing for the sensor. Taking a reading every 15 seconds.
   ledFlash3(red, red, red);
 
   Serial2.write("$Winterval=15\r\n");
@@ -96,16 +95,7 @@ void setup() {
   //Serial2.write("$Won=200\r\n");
   delay(3000);
 
-  //LoRa specific settings
-
-  /*
-    LoRa.setTxPower(txPower,RFOUT_pin);
-    txPower -- 0 ~ 20
-    RFOUT_pin could be RF_PACONFIG_PASELECT_PABOOST or RF_PACONFIG_PASELECT_RFO
-      - RF_PACONFIG_PASELECT_PABOOST -- LoRa single output via PABOOST, maximum output 20dBm
-      - RF_PACONFIG_PASELECT_RFO     -- LoRa single output via RFO_HF / RFO_LF, maximum output 14dBm
-  */
-
+  //LoRa specific settings-- allowing multiple devices to communicate on the same band with the spreading factor.
   ledFlash1(blue);
   LoRa.setTxPower(14, RF_PACONFIG_PASELECT_PABOOST);
   LoRa.setSpreadingFactor(7);
@@ -121,6 +111,7 @@ void setup() {
 
 void loop() {
 
+  //The plate is charged as the intake fan is activated.
   digitalWrite(red, LOW);
   digitalWrite(green, HIGH);
   Serial.print("GETTING SAMPLE\n");
@@ -129,6 +120,8 @@ void loop() {
   digitalWrite(plate, HIGH);
   delay(5000);
 
+  //The plate remains charged as the intake fan shuts off, the lower exhaust fan turning on
+  //in order to clear the chamber of any particles that aren't stuck to the plate
   digitalWrite(green, LOW);
   digitalWrite(blue, HIGH);
   Serial.print("CLEARING SMALLER PARTICULATE\n");
@@ -137,6 +130,8 @@ void loop() {
   delay(5000);
 
 
+  //The internal fan of the IPS-7100 and an adjacent exhaust fan turn on
+  //as the lower exhaust fan turns off. The measurement will be taken in this time.
   digitalWrite(blue, LOW);
   ledFlash2(green, green);
   Serial.print("TAKING MEASUREMENTS\n");
@@ -149,7 +144,7 @@ void loop() {
   delay(1000);
 
 
-  //Declaring empty string to store packet
+  //Writing the packet with relevant data
   int flag = 0;
   while (flag == 0)
   {
@@ -170,6 +165,7 @@ void loop() {
       Heltec.display->display();
       if (amt > 185)
       {
+        //LoRa.print() writes the packet that will be sent through LoRa automatically with LoRa.endPacket()
         LoRa.beginPacket();
         LoRa.print(packet.c_str());
         LoRa.endPacket();
@@ -184,6 +180,7 @@ void loop() {
     }
   }
 
+  //Turning the IPS-7100 fan and adjacent fan off and clearing the chamber of any remaining charged particles.
   digitalWrite(red, HIGH);
   Serial.print("CLEARING CHAMBER\n");
   digitalWrite(sensor_exhaust, LOW);
