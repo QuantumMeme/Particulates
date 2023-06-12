@@ -10,6 +10,7 @@ import RPi.GPIO as GPIO
 token = "vmLBmj4rlERpaYxjfy_j-UnYB7oRgIsBLk6A78QIy5VlEM3la3e4nelT9C_BW7i1Df2T-pU0UFJNmSAY33IszQ=="
 org = "pesinda@ornl.gov"
 bucket = "particulates"
+client_url = "https://us-east-1-1.aws.cloud2.influxdata.com"
 
 
 SLEEPTIME = 0.7
@@ -128,7 +129,7 @@ def main():
     GPIO.setmode(GPIO.BCM)
     GPIO.setup(26, GPIO.OUT)
 
-    client = InfluxDBClient(url="https://us-east-1-1.aws.cloud2.influxdata.com", token=token, org=org)
+    client = InfluxDBClient(url=client_url, token=token, org=org)
     #client = InfluxDBClient(url="http://localhost:8086", token=token, org=org)
     write_api = client.write_api(write_options=SYNCHRONOUS)
 
